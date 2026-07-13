@@ -6,6 +6,7 @@ import AICopilot from './components/AICopilot';
 
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
+import Accounts from './pages/Accounts';
 import Investments from './pages/Investments';
 import Goals from './pages/Goals';
 import Risk from './pages/Risk';
@@ -28,6 +29,7 @@ function App() {
                 <div className="content-area">
                   <Routes>
                     <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/accounts" element={<Accounts />} />
                     <Route path="/investments" element={<Investments />} />
                     <Route path="/goals" element={<Goals />} />
                     <Route path="/risk" element={<Risk />} />

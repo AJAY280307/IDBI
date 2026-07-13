@@ -1,26 +1,76 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import FinancialCard from '../components/FinancialCard';
 import { DollarSign, PieChart, Activity, Briefcase, ChevronRight } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
+import { getNetWorth, getIncome, getExpenses, getSavings, getWealth } from '../services/api';
 
-const data = [
-  { name: 'Jan', value: 4000 },
-  { name: 'Feb', value: 4500 },
-  { name: 'Mar', value: 4800 },
-  { name: 'Apr', value: 5200 },
-  { name: 'May', value: 5800 },
-  { name: 'Jun', value: 6500 },
-  { name: 'Jul', value: 7200 },
-];
-
-const expenseData = [
-  { name: 'Housing', value: 2000, color: '#008C7A' },
-  { name: 'Food', value: 800, color: '#0EA5A4' },
-  { name: 'Transport', value: 400, color: '#F97316' },
-  { name: 'Utilities', value: 300, color: '#111827' },
-];
+const COLORS = ['#008C7A', '#0EA5A4', '#F97316', '#111827', '#64748b'];
 
 const Dashboard = () => {
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState({
+    netWorth: null,
+    income: null,
+    expenses: null,
+    savings: null,
+    wealth: []
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [nw, inc, exp, sav, wlt] = await Promise.all([
+          getNetWorth(),
+          getIncome(),
+          getExpenses(),
+          getSavings(),
+          getWealth()
+        ]);
+        
+        setDashboardData({
+          netWorth: nw,
+          income: inc,
+          expenses: exp,
+          savings: sav,
+          wealth: wlt
+        });
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <h2>Loading Financial Digital Twin...</h2>
+      </div>
+    );
+  }
+
+  const { netWorth, income, expenses, savings, wealth } = dashboardData;
+
+  // Format chart data
+  const wealthGraphData = wealth.history.map(snapshot => ({
+    name: new Date(snapshot.month).toLocaleString('default', { month: 'short' }),
+    value: snapshot.net_worth
+  }));
+
+  const expenseGraphData = expenses.by_category.map((cat, index) => ({
+    name: cat.category,
+    value: cat.total,
+    color: COLORS[index % COLORS.length]
+  }));
+
+  // Helper for INR currency
+  const formatINR = (value) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '4rem' }}>
       <div>
@@ -29,10 +79,34 @@ const Dashboard = () => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-        <FinancialCard title="Net Worth" amount="$124,500.00" change={12.5} isPositive={true} icon={Briefcase} />
-        <FinancialCard title="Monthly Income" amount="$8,250.00" change={4.2} isPositive={true} icon={DollarSign} />
-        <FinancialCard title="Expenses" amount="$3,500.00" change={2.1} isPositive={false} icon={Activity} />
-        <FinancialCard title="Savings Rate" amount="42%" change={5.0} isPositive={true} icon={PieChart} />
+        <FinancialCard 
+          title="Net Worth" 
+          amount={formatINR(netWorth.net_worth)} 
+          change={12.5} // Static mock for now
+          isPositive={true} 
+          icon={Briefcase} 
+        />
+        <FinancialCard 
+          title="Monthly Income" 
+          amount={formatINR(income.current_salary)} 
+          change={income.highest_increment?.increment_percentage || 0} 
+          isPositive={(income.highest_increment?.increment_percentage || 0) >= 0} 
+          icon={DollarSign} 
+        />
+        <FinancialCard 
+          title="Total Expenses" 
+          amount={formatINR(expenses.total_expenses)} 
+          change={-2.1} 
+          isPositive={false} 
+          icon={Activity} 
+        />
+        <FinancialCard 
+          title="Predicted Savings" 
+          amount={formatINR(savings.predicted_next_month)} 
+          change={5.0} 
+          isPositive={true} 
+          icon={PieChart} 
+        />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
@@ -44,7 +118,7 @@ const Dashboard = () => {
           </div>
           <div style={{ flex: 1, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+              <AreaChart data={wealthGraphData} margin={{ top: 10, right: 0, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
@@ -53,10 +127,10 @@ const Dashboard = () => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 12}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 12}} tickFormatter={(value) => `$${value/1000}k`} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 12}} tickFormatter={(value) => `₹${(value/100000).toFixed(1)}L`} />
                 <Tooltip 
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: 'var(--shadow-md)', fontFamily: 'var(--font-body)' }}
-                  formatter={(value) => [`$${value}`, "Net Worth"]}
+                  formatter={(value) => [formatINR(value), "Net Worth"]}
                 />
                 <Area type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
               </AreaChart>
@@ -69,7 +143,6 @@ const Dashboard = () => {
           <h3>Financial Health</h3>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ position: 'relative', width: '200px', height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {/* Fake SVG Gauge */}
               <svg width="200" height="200" viewBox="0 0 200 200" style={{ position: 'absolute' }}>
                 <circle cx="100" cy="100" r="90" fill="none" stroke="var(--border)" strokeWidth="16" />
                 <circle cx="100" cy="100" r="90" fill="none" stroke="var(--primary)" strokeWidth="16" strokeDasharray="565" strokeDashoffset="113" strokeLinecap="round" transform="rotate(-90 100 100)" />
@@ -105,12 +178,12 @@ const Dashboard = () => {
           </div>
           <div style={{ height: '250px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={expenseData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+              <BarChart data={expenseGraphData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                 <XAxis type="number" hide />
                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={80} tick={{fill: 'var(--text-muted)', fontSize: 14}} />
-                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow-md)' }} />
+                <Tooltip cursor={{fill: 'transparent'}} formatter={(value) => formatINR(value)} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow-md)' }} />
                 <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={24}>
-                  {expenseData.map((entry, index) => (
+                  {expenseGraphData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Bar>
